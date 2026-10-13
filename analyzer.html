@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자동 데이터 분석기</title>
+
+    <!-- 글꼴: Noto Sans KR (Google Fonts) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- 라이브러리 (jsDelivr CDN) -->
+    <!-- PapaParse: CSV 읽기 -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <!-- SheetJS: 엑셀 읽기 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Chart.js: 차트 그리기 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+
+    <style>
+        /* ===== 색상 변수: 업무 도구 모음 공통 컨셉 ===== */
+        :root {
+            --bg: #f6f4ef;           /* 페이지 배경 (따뜻한 미색) */
+            --card: #fffdf9;         /* 카드 배경 */
+            --point: #1f3a6d;        /* 남색 포인트 */
+            --point-dark: #15284f;
+            --point-soft: #e9edf4;
+            --text: #2b2d33;
+            --muted: #6b6f78;
+            --line: #e4e0d8;
+            --field-line: #d6d1c7;
+            --warn-bg: #fdf3e3;
+            --warn-line: #ecd7ad;
+            --error: #c2410c;
+            --success: #2f6b45;
+        }
+
+        * { box-sizing: border-box; }
+
+        /* 기본 글자 크기 (PC 18px, 휴대폰 17px) */
+        html { font-size: 18px; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-family: "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        button, input, select, textarea { font-family: inherit; font-size: 1rem; }
+
+        .hidden { display: none !important; }
+
+        /* ===== 상단 링크 ===== */
+        .top-bar {
+            max-width: 1100px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 18px 20px 0;
+        }
+        .back-link { color: var(--point); text-decoration: none; font-weight: 500; }
+        .back-link:hover { text-decoration: underline; }
+
+        /* ===== 본문 ===== */
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px 20px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .page-title h1 { margin: 0; font-size: 2rem; font-weight: 700; color: var(--point); }
+        .page-title p { margin: 6px 0 0; color: var(--muted); }
+
+        /* 단계 카드 */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 28px;
+        }
+        .step-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .step-no {
+            flex-shrink: 0;
+            padding: 2px 12px;
+            border-radius: 999px;
+            background: var(--point);
+            color: #ffffff;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .step-head h2 { margin: 0; font-size: 1.3rem; color: var(--point); }
+        .step-desc { margin: -8px 0 18px; color: var(--muted); font-size: 0.95rem; }
+
+        /* ===== 버튼 ===== */
+        .btn {
+            border: none;
+            border-radius: 12px;
+            padding: 11px 20px;
+            background: var(--point);
+            color: #ffffff;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: var(--point-dark); }
+        .btn-outline {
+            border: 2px solid var(--point);
+            border-radius: 12px;
+            padding: 9px 18px;
+            background: transparent;
+            color: var(--point);
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-outline:hover { background: var(--point-soft); }
+
+        /* ===== 1단계: 파일 올리기 ===== */
+        .drop-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 40px 20px;
+            border: 2px dashed #cfc9bd;
+            border-radius: 16px;
+            background: #ffffff;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--point);
+            background: var(--point-soft);
+        }
+        .drop-zone strong { font-size: 1.1rem; color: var(--point); }
+        .drop-zone span { font-size: 0.9rem; color: var(--muted); }
+
+        .row-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .status { margin: 12px 0 0; min-height: 1.5em; font-size: 0.95rem; }
+        .status.error { color: var(--error); font-weight: 500; }
+
+        .preview-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin: 20px 0 10px;
+        }
+        .preview-head p { margin: 0; font-weight: 500; color: var(--point); }
+        select.small {
+            padding: 6px 10px;
+            border: 1px solid var(--field-line);
+            border-radius: 10px;
+            background: #ffffff;
+            color: var(--text);
+        }
+
+        /* 미리보기 표 */
+        .table-wrap {
+            overflow: auto;
+            max-height: 440px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #ffffff;
+        }
+        table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+        th, td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #efece6;
+            text-align: left;
+            white-space: nowrap;
+            max-width: 260px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        th {
+            position: sticky;
+            top: 0;
+            background: #f1eee7;
+            font-weight: 700;
+            z-index: 1;
+        }
+        td.row-no, th.row-no { color: var(--muted); text-align: right; width: 1%; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .preview-note { margin: 8px 0 0; font-size: 0.85rem; color: var(--muted); }
+
+        /* ===== 2단계: 열 분석 카드 ===== */
+        .col-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 14px;
+        }
+        .col-card {
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 18px;
+            min-width: 0;
+        }
+        .col-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .col-icon { font-size: 1.5rem; line-height: 1; }
+        .col-name {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .col-type { font-size: 0.8rem; color: var(--point); font-weight: 500; }
+        .stats {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 2px 14px;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+        .stats dt { color: var(--muted); }
+        .stats dd { margin: 0; text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+        .col-sub { margin: 12px 0 6px; font-size: 0.85rem; color: var(--muted); }
+
+        /* 상위값 비율 막대 */
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(0, 5em) 1fr 3.4em;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+        .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-track { height: 10px; border-radius: 999px; background: #efece6; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 999px; background: var(--point); }
+        .bar-pct { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .col-note { margin: 8px 0 0; font-size: 0.8rem; color: var(--muted); }
+
+        /* ===== 3단계: 자동 요약 ===== */
+        .summary-list { margin: 0; padding-left: 1.2em; }
+        .summary-list li { margin-bottom: 8px; }
+        .warn-box {
+            margin-top: 18px;
+            padding: 16px 18px;
+            border: 1px solid var(--warn-line);
+            border-radius: 14px;
+            background: var(--warn-bg);
+        }
+        .warn-box h3 { margin: 0 0 6px; font-size: 1rem; color: #8a5a12; }
+        .warn-box ul { margin: 0; padding-left: 1.2em; font-size: 0.95rem; }
+
+        /* ===== 4단계: 차트 추천 ===== */
+        .rec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 14px;
+        }
+        .rec-card {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: #ffffff;
+            text-align: left;
+            color: var(--text);
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .rec-card:hover { border-color: var(--point); }
+        .rec-card.active { border: 2px solid var(--point); padding: 15px; }
+        .rec-type {
+            align-self: flex-start;
+            padding: 1px 10px;
+            border-radius: 999px;
+            background: var(--point-soft);
+            color: var(--point);
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+        .rec-title { font-weight: 700; font-size: 0.95rem; line-height: 1.4; }
+        .rec-reason { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+        .chart-mini {
+            position: relative;
+            height: 150px;
+            overflow: hidden;
+            border-radius: 10px;
+        }
+
+        /* 크게 보기 */
+        .detail {
+            margin-top: 22px;
+            padding-top: 22px;
+            border-top: 1px solid var(--line);
+        }
+        .detail-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .detail-head h3 { margin: 0; font-size: 1.2rem; color: var(--point); }
+        .detail-head p { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 16px;
+            margin-bottom: 14px;
+        }
+        .control { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+        .control label { font-size: 0.85rem; color: var(--muted); }
+        .control select {
+            padding: 9px 12px;
+            border: 1px solid var(--field-line);
+            border-radius: 10px;
+            background: #ffffff;
+            color: var(--text);
+        }
+        .control select:focus { outline: none; border-color: var(--point); box-shadow: 0 0 0 3px rgba(31, 58, 109, 0.15); }
+        .chart-box {
+            position: relative;
+            height: 400px;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #ffffff;
+        }
+        .chart-box.heat { height: auto; overflow-x: auto; }
+        .chart-box canvas { display: block; }
+        .chart-empty {
+            margin: 0;
+            padding: 40px 0;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .chart-note { margin: 8px 0 0; font-size: 0.85rem; color: var(--muted); }
+
+        /* ===== 5단계: AI 요약 복사 ===== */
+        .ai-text {
+            width: 100%;
+            min-height: 260px;
+            padding: 14px 16px;
+            border: 1px solid var(--field-line);
+            border-radius: 14px;
+            background: #ffffff;
+            color: var(--text);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            resize: vertical;
+        }
+        .copy-msg { margin: 0; color: var(--success); font-weight: 500; }
+
+        /* ===== 하단 안내 ===== */
+        footer {
+            padding: 20px 20px 28px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        /* ===== 휴대폰 ===== */
+        @media (max-width: 560px) {
+            html { font-size: 17px; }
+            .top-bar { padding: 14px 16px 0; }
+            main { padding: 18px 16px 32px; gap: 18px; }
+            .page-title h1 { font-size: 1.6rem; }
+            .card { padding: 22px 16px; border-radius: 18px; }
+            .drop-zone { padding: 28px 14px; }
+            .chart-box { height: 300px; padding: 8px; }
+            .control { flex: 1 1 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 상단 링크 -->
+    <div class="top-bar">
+        <a href="index.html" class="back-link">← 업무 도구 모음</a>
+    </div>
+
+    <main>
+        <div class="page-title">
+            <h1>자동 데이터 분석기</h1>
+            <p>CSV나 엑셀 파일을 올리면 열을 분석하고, 요약 문장과 어울리는 차트를 추천해 드려요.</p>
+        </div>
+
+        <!-- 1단계: 파일 올리기 -->
+        <section class="card" id="step1">
+            <div class="step-head"><span class="step-no">1단계</span><h2>파일 올리기</h2></div>
+
+            <label class="drop-zone" id="dropZone" for="fileInput">
+                <strong>여기에 파일을 끌어다 놓거나 눌러서 선택하세요</strong>
+                <span>CSV, XLSX 파일 · 한글 CSV(UTF-8, EUC-KR) 모두 가능</span>
+            </label>
+            <input type="file" id="fileInput" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
+
+            <div class="row-actions">
+                <button type="button" class="btn-outline" id="sampleBtn">예시 데이터로 체험</button>
+            </div>
+            <p id="loadStatus" class="status"></p>
+
+            <div id="previewArea" class="hidden">
+                <div class="preview-head">
+                    <p id="fileInfo"></p>
+                    <select id="sheetSelect" class="small hidden" aria-label="시트 선택"></select>
+                </div>
+                <div class="table-wrap"><table id="previewTable"></table></div>
+                <p id="previewNote" class="preview-note"></p>
+            </div>
+        </section>
+
+        <!-- 2단계: 열 분석 -->
+        <section class="card hidden" id="step2">
+            <div class="step-head"><span class="step-no">2단계</span><h2>열 자동 분석</h2></div>
+            <p class="step-desc">열마다 숫자 · 날짜 · 항목 · 텍스트 중 어떤 종류인지 자동으로 판별했어요.</p>
+            <div id="colGrid" class="col-grid"></div>
+        </section>
+
+        <!-- 3단계: 자동 요약 -->
+        <section class="card hidden" id="step3">
+            <div class="step-head"><span class="step-no">3단계</span><h2>자동 요약</h2></div>
+            <ul id="summaryList" class="summary-list"></ul>
+            <div id="outlierBox" class="warn-box hidden">
+                <h3>확인이 필요한 값</h3>
+                <p class="col-note" style="margin:0 0 6px">평균에서 표준편차의 3배 이상 벗어난 값입니다. 입력 실수인지 확인해 보세요.</p>
+                <ul id="outlierList"></ul>
+            </div>
+        </section>
+
+        <!-- 4단계: 차트 추천 -->
+        <section class="card hidden" id="step4">
+            <div class="step-head"><span class="step-no">4단계</span><h2>차트 추천</h2></div>
+            <p class="step-desc">카드를 누르면 크게 보고, 축과 집계 방식을 바꿀 수 있어요.</p>
+            <div id="recGrid" class="rec-grid"></div>
+            <p id="recEmpty" class="chart-empty hidden">추천할 차트가 없습니다. 숫자·날짜·항목 열이 있는 데이터를 올려 보세요.</p>
+
+            <div id="detail" class="detail hidden">
+                <div class="detail-head">
+                    <div>
+                        <h3 id="detailTitle"></h3>
+                        <p id="detailReason"></p>
+                    </div>
+                    <button type="button" class="btn" id="pngBtn">PNG 저장</button>
+                </div>
+                <div id="controls" class="controls"></div>
+                <div id="detailBox" class="chart-box"></div>
+                <p id="detailNote" class="chart-note"></p>
+            </div>
+        </section>
+
+        <!-- 5단계: AI에게 물어볼 요약 복사 -->
+        <section class="card hidden" id="step5">
+            <div class="step-head"><span class="step-no">5단계</span><h2>AI에게 물어볼 요약 복사</h2></div>
+            <p class="step-desc">원본 데이터는 빼고 열 이름, 종류, 통계, 상위값, 자동 요약만 담았어요.</p>
+            <textarea id="aiText" class="ai-text" readonly aria-label="AI에게 보낼 요약"></textarea>
+            <div class="row-actions">
+                <button type="button" class="btn" id="copyBtn">복사</button>
+                <p id="copyMsg" class="copy-msg"></p>
+            </div>
+        </section>
+    </main>
+
+    <!-- 하단 안내 -->
+    <footer>
+        입력한 내용은 이 브라우저 안에서만 처리되며 어디에도 저장·전송되지 않습니다.
+    </footer>
+
+<script>
+// ============================================================
+// [분석 로직 시작] - 화면과 상관없는 순수 계산 함수들
+// ============================================================
+
+// 열 종류 이름과 아이콘
+const TYPE_LABEL = { number: '숫자', date: '날짜', category: '항목', text: '텍스트' };
+const TYPE_ICON = { number: '🔢', date: '📅', category: '🏷️', text: '📝' };
+const AGG_LABEL = { sum: '합계', avg: '평균', count: '개수' };
+const CHART_NAME = {
+    line: '꺾은선', bar: '막대', doughnut: '도넛',
+    scatter: '산점도', histogram: '히스토그램', heatmap: '히트맵 표'
+};
+
+// 두 자리 숫자로 맞추기 (3 → "03")
+function p2(n) { return String(n).padStart(2, '0'); }
+
+// 숫자를 보기 좋게 (1234567.891 → "1,234,568")
+function fmt(n) {
+    if (n === null || n === undefined || !isFinite(n)) return '-';
+    const abs = Math.abs(n);
+    const digits = abs >= 1000 ? 0 : abs >= 1 ? 2 : 4;
+    return Number(n).toLocaleString('ko-KR', { maximumFractionDigits: digits });
+}
+
+// 짧은 숫자 표기 (히트맵, 축 눈금용: 12345 → "1.2만")
+function fmtShort(n) {
+    const a = Math.abs(n);
+    if (a >= 1e8) return (n / 1e8).toFixed(1).replace(/\.0$/, '') + '억';
+    if (a >= 1e4) return (n / 1e4).toFixed(1).replace(/\.0$/, '') + '만';
+    return fmt(Math.round(n * 10) / 10);
+}
+
+// 퍼센트 (0.4567 → "45.7")
+function pct(ratio) { return (ratio * 100).toFixed(1); }
+
+// 한국어 조사 고르기: particle('지사', '은', '는') → '는'
+// 괄호로 끝나는 이름은 괄호 앞 글자로 판단 ("사용량(MWh)" → "사용량")
+function particle(word, withBatchim, withoutBatchim) {
+    const base = String(word).replace(/\s*[\(\[][^\)\]]*[\)\]]\s*$/, '').trim() || String(word);
+    const last = base.charCodeAt(base.length - 1);
+    if (last >= 0xAC00 && last <= 0xD7A3) {
+        return (last - 0xAC00) % 28 !== 0 ? withBatchim : withoutBatchim;
+    }
+    // 숫자로 끝나면 읽는 소리로 판단 (0영 1일 3삼 6육 7칠 8팔 → 받침 있음)
+    if (/[0-9]$/.test(base)) {
+        return '013678'.includes(base.slice(-1)) ? withBatchim : withoutBatchim;
+    }
+    return `${withBatchim}(${withoutBatchim})`;
+}
+
+// 열 이름을 따옴표로 감싸기
+function q(name) { return `‘${name}’`; }
+
+// 숫자 해석: 쉼표·통화기호·%·"원" 허용, 회계식 음수 (1,234) 허용
+function parseNumber(raw) {
+    if (raw === null || raw === undefined) return null;
+    let s = String(raw).trim();
+    if (s === '') return null;
+    s = s.replace(/,/g, '').replace(/\s/g, '').replace(/^[₩$]/, '').replace(/(원|%)$/, '');
+    if (/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return parseFloat(s);
+    const m = s.match(/^\((\d+\.?\d*)\)$/);
+    if (m) return -parseFloat(m[1]);
+    return null;
+}
+
+// 날짜 객체 만들기 (일 단위 또는 월 단위)
+function makeDate(y, m, d) {
+    if (y < 1900 || y > 2100 || m < 1 || m > 12) return null;
+    if (d !== null && d !== undefined) {
+        const lastDay = new Date(y, m, 0).getDate();
+        if (d < 1 || d > lastDay) return null;
+        return { y, m, d, gran: 'day', key: `${y}-${p2(m)}-${p2(d)}` };
+    }
+    return { y, m, d: 1, gran: 'month', key: `${y}-${p2(m)}` };
+}
+
+// 날짜 해석: 2025-03-05, 2025.3.5, 2025/3/5, 2025. 3. 5., 2025-03, 2025.03,
+//           20250305, 202503, 2025년 3월 5일, 2025년 3월 (뒤의 시간은 무시)
+function parseDate(raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return null;
+    let m;
+    m = s.match(/^(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})\.?(?:[ T].*)?$/);
+    if (m) return makeDate(+m[1], +m[2], +m[3]);
+    m = s.match(/^(\d{4})\s*년\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?/);
+    if (m) return makeDate(+m[1], +m[2], m[3] ? +m[3] : null);
+    m = s.match(/^(\d{4})\s*[-./]\s*(\d{1,2})\.?$/);
+    if (m) return makeDate(+m[1], +m[2], null);
+    m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m) return makeDate(+m[1], +m[2], +m[3]);
+    m = s.match(/^(\d{4})(\d{2})$/);
+    if (m) return makeDate(+m[1], +m[2], null);
+    return null;
+}
+
+// 번호·코드처럼 계산에 의미 없는 숫자 열인지 (요약·추천에서 제외)
+function isIdLikeName(name) {
+    return /(번호|순번|코드|아이디|^id$|^no\.?$|^seq)/i.test(String(name).trim());
+}
+
+// 열마다 종류 판별 + 통계 계산
+function analyzeColumns(headers, rows) {
+    return headers.map((name, ci) => {
+        const raw = rows.map(r => String(r[ci] ?? '').trim());
+        const filled = raw.filter(v => v !== '');
+        const n = filled.length;
+        const col = { idx: ci, name, empty: raw.length - n, filled: n, uniq: new Set(filled).size, raw };
+
+        // 전부 빈칸
+        if (n === 0) {
+            col.type = 'text'; col.avgLen = 0; col.values = raw.map(() => null);
+            return col;
+        }
+
+        // ① 날짜: 90% 이상이 날짜 형식
+        //    단, 숫자만 있는 열(202503 등)은 전부 날짜로 해석될 때만 날짜로 본다
+        const dates = raw.map(v => (v === '' ? null : parseDate(v)));
+        const dateHits = dates.filter(Boolean).length;
+        const digitOnly = filled.every(v => /^\d+$/.test(v));
+        if (dateHits / n >= 0.9 && (!digitOnly || dateHits === n)) {
+            col.type = 'date';
+            col.values = dates;
+            col.invalid = n - dateHits;
+            const valid = dates.filter(Boolean);
+            col.gran = valid.some(d => d.gran === 'day') ? 'day' : 'month';
+            const sorted = valid.slice().sort((a, b) => (a.y - b.y) || (a.m - b.m) || (a.d - b.d));
+            col.min = sorted[0];
+            col.max = sorted[sorted.length - 1];
+            return col;
+        }
+
+        // ② 숫자: 90% 이상이 숫자 (쉼표 포함)
+        const nums = raw.map(v => (v === '' ? null : parseNumber(v)));
+        const numHits = nums.filter(v => v !== null).length;
+        if (numHits / n >= 0.9) {
+            col.type = 'number';
+            col.values = nums;
+            col.invalid = n - numHits;
+            let sum = 0, min = Infinity, max = -Infinity, minRow = -1, maxRow = -1;
+            nums.forEach((v, ri) => {
+                if (v === null) return;
+                sum += v;
+                if (v < min) { min = v; minRow = ri; }
+                if (v > max) { max = v; maxRow = ri; }
+            });
+            const mean = sum / numHits;
+            let sq = 0;
+            nums.forEach(v => { if (v !== null) sq += (v - mean) ** 2; });
+            Object.assign(col, { sum, mean, min, max, minRow, maxRow, count: numHits, std: Math.sqrt(sq / numHits) });
+            col.idLike = isIdLikeName(name);
+            return col;
+        }
+
+        // ③ 항목 / ④ 텍스트: 값 종류가 적고 반복되면 항목, 아니면 텍스트
+        col.avgLen = filled.reduce((s, v) => s + v.length, 0) / n;
+        const ratio = col.uniq / n;
+        //    (같은 값이 반복되어야 항목: 고유값 비율 60% 이하)
+        if (col.uniq <= 50 && ratio <= 0.6 && col.avgLen <= 40) {
+            col.type = 'category';
+            col.values = raw.map(v => (v === '' ? null : v));
+            const counts = new Map();
+            filled.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+            col.counts = [...counts.entries()]
+                .map(([value, count]) => ({ value, count, ratio: count / n }))
+                .sort((a, b) => b.count - a.count);
+            col.top = col.counts.slice(0, 5);
+        } else {
+            col.type = 'text';
+            col.values = raw.map(v => (v === '' ? null : v));
+        }
+        return col;
+    });
+}
+
+// 요약·차트 기준이 되는 대표 숫자 열 (번호 열 제외, 첫 번째)
+function mainNumber(cols) {
+    return cols.find(c => c.type === 'number' && !c.idLike) || null;
+}
+
+// 문장에 쓸 대표 항목 열 (값 종류가 4~50개인 열 우선)
+function mainCategory(cols) {
+    const cats = cols.filter(c => c.type === 'category' && c.uniq >= 2);
+    return cats.find(c => c.uniq >= 4) || cats[0] || null;
+}
+
+// 셀 값을 글자로 (날짜는 정리된 형태로)
+function cellText(col, ri) {
+    if (col.type === 'date') return col.values[ri] ? col.values[ri].key : '(빈칸)';
+    return col.raw[ri] || '(빈칸)';
+}
+
+// 어떤 행을 설명하는 말 ("‘연월’은 2025-08, ‘지사’는 대구")
+function describeRow(cols, ri, excludeIdx) {
+    const idCols = [cols.find(c => c.type === 'date'), mainCategory(cols)]
+        .filter(c => c && c.idx !== excludeIdx);
+    return idCols.map(c => {
+        const v = cellText(c, ri);
+        return { name: c.name, value: v };
+    });
+}
+
+// 그룹별 집계: keys[행] 기준으로 vals[행]을 합계/평균/개수
+function groupBy(keys, vals, agg) {
+    const map = new Map();
+    keys.forEach((k, ri) => {
+        if (k === null || k === undefined) return;
+        let e = map.get(k);
+        if (!e) { e = { sum: 0, n: 0, rows: 0 }; map.set(k, e); }
+        e.rows++;
+        if (vals) {
+            const v = vals[ri];
+            if (v !== null && v !== undefined) { e.sum += v; e.n++; }
+        }
+    });
+    const out = [];
+    map.forEach((e, key) => {
+        let value;
+        if (agg === 'count' || !vals) value = e.rows;
+        else if (agg === 'avg') value = e.n ? e.sum / e.n : 0;
+        else value = e.sum;
+        out.push({ key, value });
+    });
+    return out;
+}
+
+// 날짜 열을 묶을 기준 (일 단위가 90일보다 많으면 월 단위로 묶음)
+function dateKeys(col) {
+    const days = new Set(col.values.filter(Boolean).map(d => d.key)).size;
+    const byMonth = col.gran === 'month' || days > 90;
+    return col.values.map(d => {
+        if (!d) return null;
+        return byMonth ? `${d.y}-${p2(d.m)}` : `${d.y}-${p2(d.m)}-${p2(d.d)}`;
+    });
+}
+
+// 자동 요약 문장 3~5개
+function buildSummary(cols, rowCount) {
+    const lines = [];
+    const main = mainNumber(cols);
+    const dateCol = cols.find(c => c.type === 'date');
+    const catCol = mainCategory(cols);
+
+    // ① 전체 구성
+    const typeCount = ['number', 'date', 'category', 'text']
+        .map(t => [t, cols.filter(c => c.type === t).length])
+        .filter(([, k]) => k > 0)
+        .map(([t, k]) => `${TYPE_LABEL[t]} ${k}개`);
+    lines.push(`전체 ${fmt(rowCount)}행, ${cols.length}개 열로 이루어져 있으며 열 종류는 ${typeCount.join(', ')}입니다.`);
+
+    // ② 최댓값과 그 행
+    if (main && main.maxRow >= 0) {
+        const ids = describeRow(cols, main.maxRow, main.idx)
+            .map(d => `${q(d.name)}${particle(d.name, '은', '는')} ${d.value}`);
+        let s = `${q(main.name)} 열의 최댓값은 ${fmt(main.max)}`;
+        s += ids.length ? `이며, 해당 행의 ${ids.join(', ')}입니다.` : `입니다.`;
+        lines.push(s);
+    }
+
+    // ③ 상위 항목 비중
+    if (catCol) {
+        const g = groupBy(catCol.values, main ? main.values : null, main ? 'sum' : 'count')
+            .sort((a, b) => b.value - a.value);
+        const total = g.reduce((s, e) => s + e.value, 0);
+        const target = main ? `${q(main.name)}` : '행 수';
+        if (total > 0 && g.length > 3) {
+            const top3 = g.slice(0, 3);
+            const share = top3.reduce((s, e) => s + e.value, 0) / total;
+            lines.push(`${q(catCol.name)} 상위 3개 항목(${top3.map(e => e.key).join(', ')})이 전체 ${target}의 ${pct(share)}%를 차지합니다.`);
+        } else if (total > 0 && g.length >= 2) {
+            const top = g[0];
+            lines.push(`${q(catCol.name)} 중 ‘${top.key}’${particle(top.key, '이', '가')} 전체 ${target}의 ${pct(top.value / total)}%로 가장 큽니다.`);
+        }
+    }
+
+    // ④ 첫 기간 대비 마지막 기간 증감
+    if (dateCol && main) {
+        const g = groupBy(dateKeys(dateCol), main.values, 'sum').sort((a, b) => (a.key < b.key ? -1 : 1));
+        if (g.length >= 2) {
+            const first = g[0], last = g[g.length - 1];
+            if (first.value !== 0) {
+                const change = (last.value - first.value) / Math.abs(first.value) * 100;
+                const subject = `${q(main.name)}${particle(main.name, '은', '는')}`;
+                if (Math.abs(change) < 0.05) {
+                    lines.push(`${subject} 첫 기간(${first.key})과 마지막 기간(${last.key})이 거의 같습니다.`);
+                } else {
+                    lines.push(`${subject} 첫 기간(${first.key}) 대비 마지막 기간(${last.key})에 ${Math.abs(change).toFixed(1)}% ${change > 0 ? '증가' : '감소'}했습니다.`);
+                }
+            }
+        }
+    }
+
+    // 문장이 부족하면 보충 (최대 5개)
+    const extras = [];
+    if (main) extras.push(`${q(main.name)} 열의 평균은 ${fmt(main.mean)}, 최솟값은 ${fmt(main.min)}입니다.`);
+    if (dateCol) extras.push(`데이터 기간은 ${dateCol.min.key}부터 ${dateCol.max.key}까지입니다.`);
+    const emptiest = cols.slice().sort((a, b) => b.empty - a.empty)[0];
+    if (emptiest && emptiest.empty > 0) {
+        extras.push(`빈칸이 가장 많은 열은 ${q(emptiest.name)}(${fmt(emptiest.empty)}개)입니다.`);
+    } else {
+        extras.push(`빈칸이 있는 셀은 없습니다.`);
+    }
+    for (const e of extras) {
+        if (lines.length >= 4) break;
+        lines.push(e);
+    }
+    return lines.slice(0, 5);
+}
+
+// 확인이 필요한 값: 평균에서 표준편차 3배 이상 벗어난 값
+function findOutliers(cols) {
+    const out = [];
+    cols.filter(c => c.type === 'number' && !c.idLike && c.count >= 5 && c.std > 0).forEach(c => {
+        c.values.forEach((v, ri) => {
+            if (v === null) return;
+            const z = (v - c.mean) / c.std;
+            if (Math.abs(z) >= 3) {
+                const ids = describeRow(cols, ri, c.idx).map(d => `${d.name} ${d.value}`);
+                const where = [`${ri + 1}번째 행`, ...ids].join(', ');
+                out.push({
+                    col: c.name, row: ri, value: v, z,
+                    text: `${q(c.name)} ${fmt(v)} (${where}) — 평균 ${fmt(c.mean)}보다 표준편차의 ${Math.abs(z).toFixed(1)}배 ${z > 0 ? '높음' : '낮음'}`
+                });
+            }
+        });
+    });
+    return out.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+}
+
+// 추천 이유 한 줄
+function reasonFor(r, cols) {
+    const n = i => cols[i].name;
+    const val = r.y !== null && r.y !== undefined ? n(r.y) : '행 개수';
+    switch (r.type) {
+        case 'line': return `날짜(${n(r.x)})에 따라 ${val}${particle(val, '이', '가')} 어떻게 변하는지 보기 좋아요.`;
+        case 'bar': return `${n(r.x)} ${cols[r.x].uniq}개 항목의 ${val}${particle(val, '을', '를')} 나란히 비교할 수 있어요.`;
+        case 'doughnut': return `${n(r.x)} ${cols[r.x].uniq}개 항목이 전체에서 차지하는 비율을 보여줘요.`;
+        case 'heatmap': {
+            const v = r.v !== null && r.v !== undefined ? n(r.v) : '행 개수';
+            return `${n(r.y)}${particle(n(r.y), '과', '와')} ${n(r.x)} 조합별 ${v} 차이를 색 농도로 보여줘요.`;
+        }
+        case 'scatter': return `${n(r.x)}${particle(n(r.x), '과', '와')} ${n(r.y)} 사이에 관계가 있는지 확인할 수 있어요.`;
+        case 'histogram': return `${n(r.x)} 값이 어느 구간에 많이 몰려 있는지 보여줘요.`;
+    }
+    return '';
+}
+
+// 열 종류 조합으로 차트 추천 (3~5개)
+function buildRecommendations(cols) {
+    const nums = cols.filter(c => c.type === 'number' && !c.idLike);
+    const dates = cols.filter(c => c.type === 'date');
+    const cats = cols.filter(c => c.type === 'category' && c.uniq >= 2);
+    const main = nums[0] || null;
+    const y = main ? main.idx : null;
+    const agg = main ? 'sum' : 'count';
+    const recs = [];
+    const same = (a, b) => a.type === b.type && a.x === b.x && a.y === b.y && a.v === b.v;
+    const add = r => { if (recs.length < 5 && !recs.some(e => same(e, r))) recs.push(r); };
+
+    // 날짜 + 숫자 → 꺾은선
+    if (dates[0]) add({ type: 'line', x: dates[0].idx, y, agg });
+    // 항목(12개 이하) + 숫자 → 막대
+    const barCat = cats.find(c => c.uniq <= 12);
+    if (barCat) add({ type: 'bar', x: barCat.idx, y, agg });
+    // 항목(6개 이하) 비율 → 도넛 (막대와 다른 열 우선)
+    const pieCat = cats.find(c => c.uniq <= 6 && c !== barCat) || cats.find(c => c.uniq <= 6);
+    if (pieCat) add({ type: 'doughnut', x: pieCat.idx, y, agg });
+    // 항목 × 항목 + 숫자 → 히트맵 표 (값 종류가 많은 쪽을 행으로)
+    const hmCats = cats.filter(c => c.uniq <= 12).sort((a, b) => b.uniq - a.uniq);
+    if (hmCats.length >= 2) add({ type: 'heatmap', x: hmCats[1].idx, y: hmCats[0].idx, v: y, agg });
+    // 숫자 + 숫자 → 산점도
+    if (nums.length >= 2) add({ type: 'scatter', x: nums[0].idx, y: nums[1].idx });
+    // 숫자 하나 → 히스토그램
+    if (nums[0]) add({ type: 'histogram', x: nums[0].idx });
+
+    // 3개가 안 되면 다른 열로 보충
+    if (recs.length < 3) {
+        nums.slice(1).forEach(c => add({ type: 'histogram', x: c.idx }));
+        cats.filter(c => c.uniq <= 12 && c !== barCat).forEach(c => add({ type: 'bar', x: c.idx, y, agg }));
+        dates.slice(1).forEach(c => add({ type: 'line', x: c.idx, y, agg }));
+    }
+
+    recs.forEach(r => { r.reason = reasonFor(r, cols); });
+    return recs;
+}
+
+// 차트 제목
+function valueLabel(cfg, cols) {
+    const vi = cfg.type === 'heatmap' ? cfg.v : cfg.y;
+    if (vi === null || vi === undefined || cfg.agg === 'count') return '행 개수';
+    return `${cols[vi].name} ${AGG_LABEL[cfg.agg]}`;
+}
+function chartTitle(cfg, cols) {
+    const n = i => cols[i].name;
+    switch (cfg.type) {
+        case 'line':
+        case 'bar': return `${n(cfg.x)}별 ${valueLabel(cfg, cols)}`;
+        case 'doughnut': return `${n(cfg.x)} 비율 (${valueLabel(cfg, cols)})`;
+        case 'heatmap': return `${n(cfg.y)} × ${n(cfg.x)} ${valueLabel(cfg, cols)}`;
+        case 'scatter': return `${n(cfg.x)} – ${n(cfg.y)} 관계`;
+        case 'histogram': return `${n(cfg.x)} 분포`;
+    }
+    return '';
+}
+
+// 많이 나온 순서로 값 고르기 (동률이면 처음 나온 순서)
+function topKeys(values, limit) {
+    const counts = new Map();
+    values.forEach(v => { if (v !== null) counts.set(v, (counts.get(v) || 0) + 1); });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(e => e[0]);
+}
+
+// 차트에 넣을 데이터 계산
+function buildChartData(cfg, cols) {
+    const X = cols[cfg.x];
+    const Y = cfg.y !== null && cfg.y !== undefined ? cols[cfg.y] : null;
+
+    if (cfg.type === 'line') {
+        const agg = Y ? cfg.agg : 'count';
+        const g = groupBy(dateKeys(X), Y ? Y.values : null, agg).sort((a, b) => (a.key < b.key ? -1 : 1));
+        return { labels: g.map(e => e.key), data: g.map(e => e.value), empty: g.length === 0 };
+    }
+
+    if (cfg.type === 'bar' || cfg.type === 'doughnut') {
+        const agg = Y ? cfg.agg : 'count';
+        let g = groupBy(X.values, Y ? Y.values : null, agg).sort((a, b) => b.value - a.value);
+        let note = '';
+        if (cfg.type === 'bar' && g.length > 20) {
+            note = `항목이 ${g.length}개라서 값이 큰 상위 20개만 표시했어요.`;
+            g = g.slice(0, 20);
+        }
+        if (cfg.type === 'doughnut' && g.length > 6) {
+            const rest = g.slice(6);
+            g = g.slice(0, 6);
+            if (agg !== 'avg') {
+                g.push({ key: '기타', value: rest.reduce((s, e) => s + e.value, 0) });
+                note = `항목이 많아서 상위 6개 외에는 ‘기타’로 묶었어요.`;
+            } else {
+                note = `항목이 많아서 상위 6개만 표시했어요.`;
+            }
+        }
+        return { labels: g.map(e => e.key), data: g.map(e => e.value), empty: g.length === 0, note };
+    }
+
+    if (cfg.type === 'heatmap') {
+        const V = cfg.v !== null && cfg.v !== undefined ? cols[cfg.v] : null;
+        const agg = V ? cfg.agg : 'count';
+        const rowKeys = topKeys(Y.values, 12);
+        const colKeys = topKeys(X.values, 12);
+        const cell = new Map();
+        X.values.forEach((xv, ri) => {
+            const yv = Y.values[ri];
+            if (xv === null || yv === null) return;
+            const k = yv + '\u0001' + xv;
+            let e = cell.get(k);
+            if (!e) { e = { sum: 0, n: 0, rows: 0 }; cell.set(k, e); }
+            e.rows++;
+            if (V && V.values[ri] !== null) { e.sum += V.values[ri]; e.n++; }
+        });
+        let min = Infinity, max = -Infinity;
+        const matrix = rowKeys.map(r => colKeys.map(c => {
+            const e = cell.get(r + '\u0001' + c);
+            if (!e) return null;
+            const v = agg === 'count' ? e.rows : agg === 'avg' ? (e.n ? e.sum / e.n : null) : e.sum;
+            if (v !== null) { min = Math.min(min, v); max = Math.max(max, v); }
+            return v;
+        }));
+        const note = (Y.uniq > 12 || X.uniq > 12) ? '항목이 많아서 자주 나오는 12개씩만 표시했어요.' : '';
+        return { rows: rowKeys, cols: colKeys, matrix, min, max, empty: rowKeys.length === 0 || colKeys.length === 0, note };
+    }
+
+    if (cfg.type === 'scatter') {
+        let points = [];
+        X.values.forEach((xv, ri) => {
+            const yv = Y.values[ri];
+            if (xv !== null && yv !== null) points.push({ x: xv, y: yv });
+        });
+        let note = '';
+        if (points.length > 2000) {
+            const step = points.length / 2000;
+            points = Array.from({ length: 2000 }, (_, i) => points[Math.floor(i * step)]);
+            note = '점이 많아서 2,000개만 골고루 뽑아 표시했어요.';
+        }
+        return { points, empty: points.length === 0, note };
+    }
+
+    if (cfg.type === 'histogram') {
+        const vals = X.values.filter(v => v !== null);
+        if (!vals.length) return { empty: true };
+        const min = Math.min(...vals), max = Math.max(...vals);
+        if (min === max) return { labels: [fmtShort(min)], data: [vals.length], empty: false };
+        const k = Math.min(20, Math.max(5, Math.ceil(Math.log2(vals.length) + 1)));
+        const width = (max - min) / k;
+        const bins = new Array(k).fill(0);
+        vals.forEach(v => { bins[Math.min(k - 1, Math.floor((v - min) / width))]++; });
+        const labels = bins.map((_, i) => `${fmtShort(min + width * i)}~${fmtShort(min + width * (i + 1))}`);
+        return { labels, data: bins, empty: false };
+    }
+    return { empty: true };
+}
+
+// AI에게 붙여넣을 요약 글 (원본 행은 넣지 않음)
+function buildAiText(fileName, rowCount, cols, summary, outliers) {
+    const L = [];
+    L.push('아래 데이터 요약을 보고 업무에 도움이 될 인사이트 3가지와 추가로 해 볼 만한 분석을 알려줘.');
+    L.push('');
+    L.push('[데이터 개요]');
+    L.push(`- 파일 이름: ${fileName}`);
+    L.push(`- 전체 ${fmt(rowCount)}행, ${cols.length}개 열`);
+    L.push('');
+    L.push('[열 정보]');
+    cols.forEach((c, i) => {
+        let s = `${i + 1}. ${c.name} (${TYPE_LABEL[c.type]}) - 빈칸 ${fmt(c.empty)}개, 고유값 ${fmt(c.uniq)}개`;
+        if (c.type === 'number') {
+            s += `, 합계 ${fmt(c.sum)}, 평균 ${fmt(c.mean)}, 최소 ${fmt(c.min)}, 최대 ${fmt(c.max)}, 표준편차 ${fmt(c.std)}`;
+        } else if (c.type === 'date') {
+            s += `, 기간 ${c.min.key} ~ ${c.max.key}`;
+        } else if (c.type === 'category') {
+            s += `, 상위값: ${c.top.map(t => `${t.value} ${fmt(t.count)}건(${pct(t.ratio)}%)`).join(', ')}`;
+        } else if (c.filled > 0) {
+            s += `, 평균 ${c.avgLen.toFixed(1)}자 (내용은 포함하지 않음)`;
+        }
+        L.push(s);
+    });
+    L.push('');
+    L.push('[자동 요약]');
+    summary.forEach(s => L.push(`- ${s}`));
+    if (outliers.length) {
+        L.push('');
+        L.push('[확인이 필요한 값 (평균에서 표준편차 3배 이상)]');
+        outliers.slice(0, 5).forEach(o => L.push(`- ${o.text}`));
+        if (outliers.length > 5) L.push(`- 외 ${outliers.length - 5}건`);
+    }
+    return L.join('\n');
+}
+
+// 예시 데이터: 가상의 지사별 월간 전력사용량 (매번 같은 값이 나오도록 고정된 난수 사용)
+function makeSampleData() {
+    let seed = 20250101;
+    const rand = () => {   // 간단한 고정 난수 (mulberry32)
+        seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const branches = [['서울', 3000], ['부산', 2200], ['대구', 1700], ['광주', 1200], ['대전', 1400]];
+    const uses = [['주거용', 0.36, 0.13], ['산업용', 0.42, 0.11], ['상업용', 0.22, 0.15]];   // [용도, 비중, MWh당 요금(백만원)]
+    const season = [1.18, 1.10, 0.98, 0.90, 0.92, 1.02, 1.15, 1.22, 1.00, 0.92, 0.98, 1.12]; // 월별 계절 영향
+    const notes = { '대구|산업용|8': '설비 증설 시운전', '서울|상업용|7': '폭염 영향', '부산|주거용|2': '계량기 교체' };
+
+    const headers = ['연월', '지사', '용도', '사용량(MWh)', '요금(백만원)', '비고'];
+    const rows = [];
+    for (let m = 1; m <= 12; m++) {
+        for (const [branch, base] of branches) {
+            for (const [use, share, price] of uses) {
+                let usage = base * share * season[m - 1] * (1 + 0.004 * m) * (0.95 + rand() * 0.1);
+                if (branch === '대구' && use === '산업용' && m === 8) usage *= 3.2;   // 일부러 넣은 튀는 값
+                usage = Math.round(usage);
+                const fee = Math.round(usage * price * 10) / 10;
+                rows.push([`2025-${p2(m)}`, branch, use, usage.toLocaleString('en-US'), String(fee), notes[`${branch}|${use}|${m}`] || '']);
+            }
+        }
+    }
+    return { headers, rows };
+}
+
+// ============================================================
+// [분석 로직 끝]
+// ============================================================
+
+
+// ============================================================
+// 화면 처리
+// ============================================================
+
+// 현재 불러온 데이터와 분석 결과 (메모리에만 보관)
+const state = {
+    fileName: '', headers: [], rows: [], cols: [],
+    summary: [], outliers: [], recs: [],
+    workbook: null,          // 엑셀일 때 시트 전환용
+    current: null,           // 크게 보고 있는 차트 설정
+    currentIndex: -1,
+    detail: null,            // 크게 보기 차트 { canvas, chart }
+    minis: []                // 미리보기 차트들
+};
+
+const MAX_ROWS = 100000;     // 너무 큰 파일은 앞부분만 분석
+const NAVY = '#1f3a6d';
+const DOUGHNUT_COLORS = ['#1f3a6d', '#5b74a3', '#9fb0cf', '#c9a46a', '#e3cfa6', '#7d8597', '#cfd5e1'];
+
+const $ = id => document.getElementById(id);
+
+// HTML 특수문자 바꾸기
+function esc(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+// Chart.js 기본 설정: 글꼴, PNG 저장 시 흰 배경
+if (window.Chart) {
+    Chart.defaults.font.family = '"Noto Sans KR", sans-serif';
+    Chart.defaults.color = '#4a4d55';
+    Chart.register({
+        id: 'whiteBackground',
+        beforeDraw(chart) {
+            const { ctx, width, height } = chart;
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.restore();
+        }
+    });
+}
+
+function setStatus(msg, isError = false) {
+    $('loadStatus').textContent = msg;
+    $('loadStatus').className = 'status' + (isError ? ' error' : '');
+}
+
+// ----- 1단계: 파일 읽기 -----
+
+// 글자 인코딩 판별: UTF-8로 먼저 읽고, 깨지면 EUC-KR(한글 엑셀 CSV)로 다시 읽기
+function decodeText(buf) {
+    const bytes = new Uint8Array(buf);
+    try {
+        return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), enc: 'UTF-8' };
+    } catch (e) {
+        return { text: new TextDecoder('euc-kr').decode(bytes), enc: 'EUC-KR' };
+    }
+}
+
+// 2차원 배열 → 머리글 + 데이터 행 정리
+function toTable(matrix) {
+    const isEmptyRow = r => !r || r.every(v => String(v ?? '').trim() === '');
+    let start = 0;
+    while (start < matrix.length && isEmptyRow(matrix[start])) start++;
+    if (start >= matrix.length) throw new Error('파일에 데이터가 없습니다.');
+
+    const width = Math.max(...matrix.slice(start, start + 1000).map(r => r.length));
+    const headerRow = matrix[start];
+    const used = new Map();
+    const headers = Array.from({ length: width }, (_, i) => {
+        let name = String(headerRow[i] ?? '').trim() || `열${i + 1}`;
+        if (used.has(name)) {   // 같은 이름이 있으면 번호 붙이기
+            const k = used.get(name) + 1;
+            used.set(name, k);
+            name = `${name} (${k})`;
+        } else {
+            used.set(name, 1);
+        }
+        return name;
+    });
+
+    let rows = matrix.slice(start + 1)
+        .filter(r => !isEmptyRow(r))
+        .map(r => headers.map((_, i) => String(r[i] ?? '').trim()));
+    let note = '';
+    if (rows.length > MAX_ROWS) {
+        note = `행이 너무 많아서 앞 ${fmt(MAX_ROWS)}행만 분석했어요.`;
+        rows = rows.slice(0, MAX_ROWS);
+    }
+    if (!rows.length) throw new Error('머리글 아래에 데이터 행이 없습니다.');
+    return { headers, rows, note };
+}
+
+function readCsv(buf) {
+    const { text, enc } = decodeText(buf);
+    const result = Papa.parse(text, { skipEmptyLines: 'greedy' });
+    const table = toTable(result.data);
+    table.enc = enc;
+    return table;
+}
+
+// 엑셀 셀 → 글자 (날짜 서식 셀은 2025-03-05 형태로)
+function cellToText(cell) {
+    if (!cell || cell.v === null || cell.v === undefined) return '';
+    if (cell.t === 'n') {
+        if (cell.z && XLSX.SSF.is_date(cell.z)) {
+            const d = XLSX.SSF.parse_date_code(cell.v);
+            if (d) return `${d.y}-${p2(d.m)}-${p2(d.d)}`;
+        }
+        return String(cell.v);
+    }
+    if (cell.t === 'd') {
+        const d = cell.v;
+        return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+    }
+    if (cell.t === 'b') return cell.v ? 'TRUE' : 'FALSE';
+    if (cell.t === 'e') return '';
+    return String(cell.v).trim();
+}
+
+function sheetToTable(ws) {
+    if (!ws || !ws['!ref']) throw new Error('시트가 비어 있습니다.');
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const lastRow = Math.min(range.e.r, range.s.r + MAX_ROWS + 50);
+    const matrix = [];
+    for (let r = range.s.r; r <= lastRow; r++) {
+        const row = [];
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            row.push(cellToText(ws[XLSX.utils.encode_cell({ r, c })]));
+        }
+        matrix.push(row);
+    }
+    return toTable(matrix);
+}
+
+async function loadFile(file) {
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    setStatus('파일을 읽는 중입니다...');
+    try {
+        const buf = await file.arrayBuffer();
+        if (['csv', 'tsv', 'txt'].includes(ext)) {
+            if (!window.Papa) throw new Error('CSV 읽기 도구를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
+            state.workbook = null;
+            const t = readCsv(buf);
+            setData(t.headers, t.rows, file.name, [`인코딩 ${t.enc}`], t.note);
+        } else if (['xlsx', 'xls'].includes(ext)) {
+            if (!window.XLSX) throw new Error('엑셀 읽기 도구를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
+            state.workbook = XLSX.read(new Uint8Array(buf), { type: 'array', cellNF: true });
+            state.workbook.fileName = file.name;
+            loadSheet(state.workbook.SheetNames[0]);
+        } else {
+            throw new Error('CSV 또는 엑셀(XLSX) 파일만 올릴 수 있어요.');
+        }
+    } catch (err) {
+        setStatus(err.message || '파일을 읽지 못했습니다.', true);
+    }
+}
+
+// 엑셀 시트 하나 불러오기
+function loadSheet(name) {
+    const wb = state.workbook;
+    try {
+        const t = sheetToTable(wb.Sheets[name]);
+        const info = wb.SheetNames.length > 1 ? [`시트 ‘${name}’`] : [];
+        setData(t.headers, t.rows, wb.fileName, info, t.note);
+    } catch (err) {
+        setStatus(err.message, true);
+    }
+    // 시트가 여러 개면 선택 상자 표시
+    const sel = $('sheetSelect');
+    if (wb.SheetNames.length > 1) {
+        sel.innerHTML = wb.SheetNames.map(s => `<option value="${esc(s)}"${s === name ? ' selected' : ''}>${esc(s)}</option>`).join('');
+        sel.classList.remove('hidden');
+    } else {
+        sel.classList.add('hidden');
+    }
+}
+
+function loadSample() {
+    state.workbook = null;
+    $('sheetSelect').classList.add('hidden');
+    const s = makeSampleData();
+    setData(s.headers, s.rows, '예시_지사별_월간_전력사용량.csv', ['예시 데이터'], '');
+}
+
+// 데이터가 바뀌면 전체 분석 후 화면 갱신
+function setData(headers, rows, fileName, infoParts, note) {
+    state.headers = headers;
+    state.rows = rows;
+    state.fileName = fileName;
+    state.cols = analyzeColumns(headers, rows);
+    state.summary = buildSummary(state.cols, rows.length);
+    state.outliers = findOutliers(state.cols);
+    state.recs = buildRecommendations(state.cols);
+
+    setStatus(note || '');
+    $('fileInfo').textContent = [fileName, `${fmt(rows.length)}행`, `${headers.length}개 열`, ...infoParts].join(' · ');
+    renderPreview();
+    renderColumns();
+    renderSummary();
+    renderRecs();
+    renderAiText();
+    ['previewArea', 'step2', 'step3', 'step4', 'step5'].forEach(id => $(id).classList.remove('hidden'));
+}
+
+// 처음 50행 미리보기 표
+function renderPreview() {
+    const types = state.cols.map(c => c.type);
+    const head = `<thead><tr><th class="row-no">#</th>${state.headers.map(h => `<th title="${esc(h)}">${esc(h)}</th>`).join('')}</tr></thead>`;
+    const body = state.rows.slice(0, 50).map((r, i) =>
+        `<tr><td class="row-no">${i + 1}</td>${r.map((v, ci) =>
+            `<td class="${types[ci] === 'number' ? 'num' : ''}" title="${esc(v)}">${esc(v)}</td>`).join('')}</tr>`
+    ).join('');
+    $('previewTable').innerHTML = head + `<tbody>${body}</tbody>`;
+    $('previewNote').textContent = state.rows.length > 50
+        ? `전체 ${fmt(state.rows.length)}행 중 처음 50행만 보여드려요.`
+        : `전체 ${fmt(state.rows.length)}행을 모두 보여드려요.`;
+}
+
+// ----- 2단계: 열 분석 카드 -----
+function renderColumns() {
+    $('colGrid').innerHTML = state.cols.map(c => {
+        let body = `<dl class="stats">
+            <dt>빈칸</dt><dd>${fmt(c.empty)}개</dd>
+            <dt>고유값</dt><dd>${fmt(c.uniq)}개</dd>`;
+        if (c.type === 'number') {
+            body += `<dt>합계</dt><dd>${fmt(c.sum)}</dd>
+                     <dt>평균</dt><dd>${fmt(c.mean)}</dd>
+                     <dt>최소</dt><dd>${fmt(c.min)}</dd>
+                     <dt>최대</dt><dd>${fmt(c.max)}</dd>`;
+        } else if (c.type === 'date') {
+            body += `<dt>시작</dt><dd>${c.min.key}</dd>
+                     <dt>끝</dt><dd>${c.max.key}</dd>
+                     <dt>단위</dt><dd>${c.gran === 'day' ? '일' : '월'}</dd>`;
+        } else if (c.type === 'text' && c.filled > 0) {
+            body += `<dt>평균 길이</dt><dd>${c.avgLen.toFixed(1)}자</dd>`;
+        }
+        body += `</dl>`;
+
+        if (c.type === 'category') {
+            body += `<p class="col-sub">상위 ${c.top.length}개 값</p>` + c.top.map(t => `
+                <div class="bar-row">
+                    <span class="bar-label" title="${esc(t.value)}">${esc(t.value)}</span>
+                    <span class="bar-track"><span class="bar-fill" style="width:${(t.ratio * 100).toFixed(1)}%; display:block"></span></span>
+                    <span class="bar-pct">${pct(t.ratio)}%</span>
+                </div>`).join('');
+            if (c.uniq > 5) body += `<p class="col-note">그 외 ${fmt(c.uniq - 5)}개 값</p>`;
+        }
+        if (c.invalid) body += `<p class="col-note">${TYPE_LABEL[c.type]}로 읽히지 않는 값 ${fmt(c.invalid)}개는 계산에서 뺐어요.</p>`;
+        if (c.idLike) body += `<p class="col-note">번호·코드 열로 보여서 요약과 추천에서는 뺐어요.</p>`;
+        if (c.filled === 0) body += `<p class="col-note">값이 모두 비어 있어요.</p>`;
+
+        return `<div class="col-card">
+            <div class="col-title">
+                <span class="col-icon" aria-hidden="true">${TYPE_ICON[c.type]}</span>
+                <div style="min-width:0">
+                    <p class="col-name" title="${esc(c.name)}">${esc(c.name)}</p>
+                    <span class="col-type">${TYPE_LABEL[c.type]}</span>
+                </div>
+            </div>
+            ${body}
+        </div>`;
+    }).join('');
+}
+
+// ----- 3단계: 자동 요약 -----
+function renderSummary() {
+    $('summaryList').innerHTML = state.summary.map(s => `<li>${esc(s)}</li>`).join('');
+    const box = $('outlierBox');
+    if (state.outliers.length) {
+        const shown = state.outliers.slice(0, 5).map(o => `<li>${esc(o.text)}</li>`).join('');
+        const more = state.outliers.length > 5 ? `<li>외 ${state.outliers.length - 5}건</li>` : '';
+        $('outlierList').innerHTML = shown + more;
+        box.classList.remove('hidden');
+    } else {
+        box.classList.add('hidden');
+    }
+}
+
+// ----- 4단계: 차트 -----
+
+// 히트맵 칸 색 (값이 클수록 진한 남색)
+function heatColor(t) {
+    const a = [238, 241, 247], b = [31, 58, 109];
+    return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`;
+}
+
+// 글자가 칸보다 길면 줄이기
+function fitText(ctx, text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    let s = text;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
+}
+
+// 히트맵 표를 캔버스에 그리기 (PNG로 저장할 수 있도록)
+function drawHeatmap(canvas, hm, mini, availW) {
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    const font = '"Noto Sans KR", sans-serif';
+    const nR = hm.rows.length, nC = hm.cols.length;
+    let labelW = 0, headH = 0, cellW, cellH;
+
+    if (mini) {
+        cellW = availW / nC;
+        cellH = 150 / nR;
+    } else {
+        ctx.font = `14px ${font}`;
+        labelW = Math.min(140, Math.max(...hm.rows.map(r => ctx.measureText(String(r)).width)) + 24);
+        headH = 40;
+        cellW = Math.max(70, (availW - labelW) / nC);
+        cellH = 42;
+    }
+    const W = Math.floor(labelW + cellW * nC);
+    const H = Math.floor(headH + cellH * nR);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    const range = (hm.max - hm.min) || 1;
+
+    hm.rows.forEach((r, ri) => {
+        hm.cols.forEach((c, ci) => {
+            const v = hm.matrix[ri][ci];
+            const x = labelW + ci * cellW, y = headH + ri * cellH;
+            const t = v === null ? 0 : (v - hm.min) / range;
+            ctx.fillStyle = v === null ? '#f4f2ed' : heatColor(t);
+            ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+            if (!mini && v !== null) {
+                ctx.font = `13px ${font}`;
+                ctx.fillStyle = t > 0.5 ? '#ffffff' : '#2b2d33';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(fitText(ctx, fmtShort(v), cellW - 6), x + cellW / 2, y + cellH / 2);
+            }
+        });
+    });
+
+    if (!mini) {
+        ctx.font = `14px ${font}`;
+        ctx.fillStyle = '#2b2d33';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        hm.rows.forEach((r, ri) => ctx.fillText(fitText(ctx, String(r), labelW - 16), labelW - 10, headH + ri * cellH + cellH / 2));
+        ctx.textAlign = 'center';
+        hm.cols.forEach((c, ci) => ctx.fillText(fitText(ctx, String(c), cellW - 8), labelW + ci * cellW + cellW / 2, headH / 2));
+    }
+}
+
+// Chart.js 설정 만들기
+function makeChartConfig(cfg, data, mini, wide) {
+    const cols = state.cols;
+    const options = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: mini ? false : { duration: 400 },
+        layout: { padding: mini ? 6 : 4 },
+        plugins: {
+            legend: { display: false },
+            tooltip: { enabled: !mini }
+        }
+    };
+    if (mini) options.events = [];
+
+    const axisTitle = text => ({ display: !mini, text });
+    const valueTicks = { callback: v => fmtShort(v) };
+
+    if (cfg.type === 'doughnut') {
+        const total = data.data.reduce((s, v) => s + v, 0) || 1;
+        options.plugins.legend = { display: !mini, position: wide ? 'right' : 'bottom' };
+        options.plugins.tooltip.callbacks = {
+            label: c => ` ${c.label}: ${fmt(c.raw)} (${pct(c.raw / total)}%)`
+        };
+        options.cutout = '55%';
+        return {
+            type: 'doughnut',
+            data: { labels: data.labels, datasets: [{ data: data.data, backgroundColor: DOUGHNUT_COLORS, borderColor: '#ffffff', borderWidth: 2 }] },
+            options
+        };
+    }
+
+    if (cfg.type === 'scatter') {
+        options.scales = {
+            x: { type: 'linear', display: !mini, title: axisTitle(cols[cfg.x].name), ticks: valueTicks },
+            y: { display: !mini, title: axisTitle(cols[cfg.y].name), ticks: valueTicks }
+        };
+        options.plugins.tooltip.callbacks = { label: c => ` (${fmt(c.raw.x)}, ${fmt(c.raw.y)})` };
+        return {
+            type: 'scatter',
+            data: { datasets: [{ data: data.points, backgroundColor: 'rgba(31, 58, 109, 0.55)', pointRadius: mini ? 2 : 4 }] },
+            options
+        };
+    }
+
+    // 꺾은선, 막대, 히스토그램
+    const yTitle = cfg.type === 'histogram' ? '개수' : valueLabel(cfg, cols);
+    options.scales = {
+        x: { display: !mini, title: axisTitle(cols[cfg.x].name), ticks: { maxRotation: 45, autoSkip: true }, grid: { display: false } },
+        y: { display: !mini, beginAtZero: true, title: axisTitle(yTitle), ticks: valueTicks }
+    };
+    options.plugins.tooltip.callbacks = { label: c => ` ${fmt(c.raw)}` };
+
+    if (cfg.type === 'line') {
+        return {
+            type: 'line',
+            data: { labels: data.labels, datasets: [{ data: data.data, borderColor: NAVY, backgroundColor: 'rgba(31, 58, 109, 0.12)', fill: true, tension: 0.25, pointRadius: mini ? 0 : 3, borderWidth: 2 }] },
+            options
+        };
+    }
+    const dataset = { data: data.data, backgroundColor: NAVY, borderRadius: 4 };
+    if (cfg.type === 'histogram') { dataset.categoryPercentage = 1; dataset.barPercentage = 0.95; dataset.backgroundColor = '#5b74a3'; }
+    return { type: 'bar', data: { labels: data.labels, datasets: [dataset] }, options };
+}
+
+// 차트 하나 그리기 (미리보기 / 크게 보기 공용)
+function renderChart(container, cfg, mini) {
+    const data = buildChartData(cfg, state.cols);
+    container.innerHTML = '';
+    container.classList.toggle('heat', cfg.type === 'heatmap' && !mini);
+    if (data.empty) {
+        container.innerHTML = '<p class="chart-empty">표시할 데이터가 없습니다</p>';
+        return { data };
+    }
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+
+    if (cfg.type === 'heatmap') {
+        const pad = mini ? 0 : 24;
+        drawHeatmap(canvas, data, mini, Math.max(200, container.clientWidth - pad));
+        return { canvas, data };
+    }
+    if (!window.Chart) {
+        container.innerHTML = '<p class="chart-empty">차트 도구를 불러오지 못했습니다</p>';
+        return { data };
+    }
+    const chart = new Chart(canvas, makeChartConfig(cfg, data, mini, container.clientWidth > 520));
+    return { canvas, chart, data };
+}
+
+// 추천 카드 목록
+function renderRecs() {
+    state.minis.forEach(m => m.chart && m.chart.destroy());
+    state.minis = [];
+    closeDetail();
+
+    const grid = $('recGrid');
+    $('recEmpty').classList.toggle('hidden', state.recs.length > 0);
+    grid.innerHTML = state.recs.map((r, i) => `
+        <button type="button" class="rec-card" data-index="${i}">
+            <span class="rec-type">${CHART_NAME[r.type]}</span>
+            <span class="rec-title">${esc(chartTitle(r, state.cols))}</span>
+            <div class="chart-mini" id="mini${i}"></div>
+            <span class="rec-reason">${esc(r.reason)}</span>
+        </button>`).join('');
+
+    state.recs.forEach((r, i) => state.minis.push(renderChart($('mini' + i), r, true)));
+    grid.querySelectorAll('.rec-card').forEach(btn => {
+        btn.addEventListener('click', () => openDetail(+btn.dataset.index));
+    });
+}
+
+// 크게 보기: 열기
+function openDetail(i) {
+    state.currentIndex = i;
+    state.current = { ...state.recs[i] };
+    document.querySelectorAll('.rec-card').forEach(b => b.classList.toggle('active', +b.dataset.index === i));
+    $('detail').classList.remove('hidden');
+    renderControls();
+    renderDetail();
+    $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeDetail() {
+    if (state.detail && state.detail.chart) state.detail.chart.destroy();
+    state.detail = null;
+    state.current = null;
+    $('detail').classList.add('hidden');
+}
+
+// 차트 종류별로 바꿀 수 있는 항목
+const CONTROL_SPEC = {
+    line:      { x: { label: 'X축 (날짜)', types: ['date'] },     y: { label: 'Y축 (값)', types: ['number'], none: true }, agg: true },
+    bar:       { x: { label: 'X축 (항목)', types: ['category'] }, y: { label: 'Y축 (값)', types: ['number'], none: true }, agg: true },
+    doughnut:  { x: { label: '항목', types: ['category'] },       y: { label: '값', types: ['number'], none: true }, agg: true },
+    heatmap:   { x: { label: 'X축 (열 방향 항목)', types: ['category'] }, y: { label: 'Y축 (행 방향 항목)', types: ['category'] },
+                 v: { label: '칸에 넣을 값', types: ['number'], none: true }, agg: true },
+    scatter:   { x: { label: 'X축', types: ['number'] },          y: { label: 'Y축', types: ['number'] }, agg: false },
+    histogram: { x: { label: '값', types: ['number'] }, agg: false }
+};
+
+// 축·집계 선택 상자 만들기
+function renderControls() {
+    const cfg = state.current;
+    const spec = CONTROL_SPEC[cfg.type];
+    const box = $('controls');
+    box.innerHTML = '';
+
+    const makeSelect = (key, s) => {
+        const options = state.cols.filter(c => s.types.includes(c.type));
+        let html = s.none ? `<option value="">(없음 · 행 개수 세기)</option>` : '';
+        html += options.map(c => `<option value="${c.idx}">${esc(c.name)}</option>`).join('');
+        const wrap = document.createElement('div');
+        wrap.className = 'control';
+        wrap.innerHTML = `<label for="ctl_${key}">${s.label}</label><select id="ctl_${key}">${html}</select>`;
+        const sel = wrap.querySelector('select');
+        sel.value = cfg[key] === null || cfg[key] === undefined ? '' : String(cfg[key]);
+        sel.addEventListener('change', () => {
+            cfg[key] = sel.value === '' ? null : +sel.value;
+            syncAgg();
+            renderDetail();
+        });
+        box.appendChild(wrap);
+    };
+
+    ['x', 'y', 'v'].forEach(k => { if (spec[k]) makeSelect(k, spec[k]); });
+
+    if (spec.agg) {
+        const wrap = document.createElement('div');
+        wrap.className = 'control';
+        wrap.innerHTML = `<label for="ctl_agg">집계 방식</label>
+            <select id="ctl_agg">
+                <option value="sum">합계</option>
+                <option value="avg">평균</option>
+                <option value="count">개수</option>
+            </select>`;
+        const sel = wrap.querySelector('select');
+        sel.addEventListener('change', () => { cfg.agg = sel.value; renderDetail(); });
+        box.appendChild(wrap);
+        syncAgg();
+    }
+}
+
+// 값 열을 고르지 않았으면 집계는 '개수'만 가능
+function syncAgg() {
+    const cfg = state.current;
+    const sel = $('ctl_agg');
+    if (!sel) return;
+    const valueKey = cfg.type === 'heatmap' ? 'v' : 'y';
+    const hasValue = cfg[valueKey] !== null && cfg[valueKey] !== undefined;
+    if (!hasValue) cfg.agg = 'count';
+    if (hasValue && !cfg.agg) cfg.agg = 'sum';
+    sel.value = cfg.agg;
+    sel.disabled = !hasValue;
+}
+
+// 크게 보기 차트 다시 그리기
+function renderDetail() {
+    const cfg = state.current;
+    if (state.detail && state.detail.chart) state.detail.chart.destroy();
+    $('detailTitle').textContent = `${CHART_NAME[cfg.type]} · ${chartTitle(cfg, state.cols)}`;
+    $('detailReason').textContent = reasonFor(cfg, state.cols);
+    state.detail = renderChart($('detailBox'), cfg, false);
+    $('detailNote').textContent = (state.detail.data && state.detail.data.note) || '';
+    $('pngBtn').disabled = !state.detail.canvas;
+}
+
+// PNG 저장
+function savePng() {
+    if (!state.detail || !state.detail.canvas) return;
+    const name = $('detailTitle').textContent.replace(/[\\/:*?"<>|]/g, '_').trim() || '차트';
+    const link = document.createElement('a');
+    link.href = state.detail.canvas.toDataURL('image/png');
+    link.download = `${name}.png`;
+    link.click();
+}
+
+// ----- 5단계: AI 요약 -----
+function renderAiText() {
+    $('aiText').value = buildAiText(state.fileName, state.rows.length, state.cols, state.summary, state.outliers);
+    $('copyMsg').textContent = '';
+}
+
+async function copyAiText() {
+    const ta = $('aiText');
+    try {
+        await navigator.clipboard.writeText(ta.value);
+    } catch (e) {
+        // 클립보드 권한이 없을 때 예전 방식으로 복사
+        ta.select();
+        document.execCommand('copy');
+    }
+    $('copyMsg').textContent = '복사됐어요! Claude나 Gemini에 붙여넣어 보세요';
+}
+
+// ----- 이벤트 연결 -----
+const dropZone = $('dropZone');
+['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+}));
+dropZone.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+// 영역 밖에 떨어뜨려도 브라우저가 파일을 열어 버리지 않게
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+$('fileInput').addEventListener('change', e => {
+    loadFile(e.target.files[0]);
+    e.target.value = '';   // 같은 파일을 다시 골라도 동작하게
+});
+$('sampleBtn').addEventListener('click', loadSample);
+$('sheetSelect').addEventListener('change', e => loadSheet(e.target.value));
+$('pngBtn').addEventListener('click', savePng);
+$('copyBtn').addEventListener('click', copyAiText);
+
+// 라이브러리를 불러오지 못했을 때 안내
+window.addEventListener('load', () => {
+    const missing = [!window.Papa && 'PapaParse', !window.XLSX && 'SheetJS', !window.Chart && 'Chart.js'].filter(Boolean);
+    if (missing.length) setStatus(`${missing.join(', ')}를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.`, true);
+});
+</script>
+</body>
+</html>
