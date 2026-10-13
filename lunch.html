@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오늘 뭐 먹지? - 점심 메뉴 추천 및 관리</title>
+
+    <!-- 글꼴: Noto Sans KR (Google Fonts) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- 아이콘: Font Awesome (cdnjs CDN) - 검색·삭제 아이콘에만 사용 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <style>
+        /* ===== 색상 변수: 눈이 편한 미색 배경 + 남색 포인트 ===== */
+        :root {
+            --bg: #f6f4ef;           /* 페이지 배경 (따뜻한 미색) */
+            --card: #fffdf9;         /* 카드 배경 (순백보다 부드러운 흰색) */
+            --point: #1f3a6d;        /* 남색 포인트 */
+            --point-dark: #15284f;   /* 버튼 누를 때 색 */
+            --point-soft: #e9edf4;   /* 연한 남색 */
+            --text: #2b2d33;         /* 본문 글자 (진한 회색) */
+            --muted: #6b6f78;        /* 보조 글자 */
+            --line: #e4e0d8;         /* 테두리 */
+            --danger: #c2410c;
+        }
+
+        * { box-sizing: border-box; }
+
+        /* 기본 글자 크기를 키움 (PC 18px, 휴대폰 17px) */
+        html { font-size: 18px; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-family: "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        button, input, select { font-family: inherit; font-size: 1rem; }
+
+        /* ===== 상단 링크 ===== */
+        .top-bar {
+            max-width: 1100px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 18px 20px 0;
+        }
+        .back-link {
+            color: var(--point);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link:hover { text-decoration: underline; }
+
+        /* ===== 본문 ===== */
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px 20px 40px;
+        }
+
+        .page-title { margin-bottom: 28px; }
+        .page-title h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--point);
+        }
+        .page-title p {
+            margin: 6px 0 0;
+            color: var(--muted);
+        }
+
+        /* PC: 2단 / 태블릿·휴대폰: 1단 */
+        .layout {
+            display: grid;
+            grid-template-columns: 5fr 7fr;
+            gap: 24px;
+            align-items: start;
+        }
+        .left-col {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* 둥근 카드 (그림자 없이 얇은 테두리만) */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 28px;
+        }
+        .card h2 {
+            margin: 0 0 18px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--point);
+        }
+        .card.center { text-align: center; }
+
+        /* ===== 룰렛 ===== */
+        .roulette-area {
+            display: flex;
+            justify-content: center;
+            margin: 26px 0;
+        }
+        .roulette-container {
+            position: relative;
+            width: min(300px, 100%);
+            aspect-ratio: 1 / 1;
+        }
+        .roulette-arrow {
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 14px solid transparent;
+            border-right: 14px solid transparent;
+            border-top: 24px solid var(--danger);
+            z-index: 2;
+        }
+        .roulette-wheel {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 6px solid var(--point);
+            background: var(--card);
+            transition: transform 4s cubic-bezier(0.15, 0.85, 0.35, 1.2);
+        }
+
+        /* 추첨 결과 */
+        .result-box {
+            background: var(--point-soft);
+            border-radius: 16px;
+            padding: 18px 14px;
+            margin-bottom: 20px;
+            transition: background 0.3s;
+        }
+        .result-box.highlight { background: #fdecc8; }
+        .result-hint { margin: 0; font-size: 0.9rem; color: var(--muted); }
+        .result-name { margin: 4px 0 0; font-size: 1.8rem; font-weight: 700; color: var(--point); line-height: 1.4; }
+        .result-cat { margin: 2px 0 0; font-size: 0.9rem; color: var(--muted); min-height: 1.5em; }
+
+        /* ===== 버튼 ===== */
+        .btn {
+            width: 100%;
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            font-weight: 700;
+            padding: 15px 20px;
+            transition: background 0.2s;
+        }
+        .btn-primary {
+            background: var(--point);
+            color: #ffffff;
+            font-size: 1.1rem;
+        }
+        .btn-primary:hover:not(:disabled) { background: var(--point-dark); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-outline {
+            background: transparent;
+            color: var(--point);
+            border: 2px solid var(--point);
+        }
+        .btn-outline:hover { background: var(--point-soft); }
+
+        .filter-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        /* ===== 입력 요소 ===== */
+        .form-group { margin-bottom: 18px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .field {
+            width: 100%;
+            padding: 13px 16px;
+            background: #ffffff;
+            border: 1px solid #d6d1c7;
+            border-radius: 12px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field:focus {
+            border-color: var(--point);
+            box-shadow: 0 0 0 3px rgba(31, 58, 109, 0.15);
+        }
+        .select-small {
+            padding: 6px 10px;
+            border: 1px solid #d6d1c7;
+            border-radius: 10px;
+            background: #ffffff;
+            color: var(--text);
+            outline: none;
+        }
+        .select-small:focus { border-color: var(--point); }
+
+        /* ===== 메뉴 목록 ===== */
+        .list-header h2 { margin-bottom: 2px; }
+        .list-count { margin: 0 0 16px; color: var(--muted); font-size: 0.95rem; }
+        .list-count strong { color: var(--point); }
+
+        /* 카테고리 탭 */
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .tab {
+            border: 1px solid var(--line);
+            background: #ffffff;
+            padding: 7px 16px;
+            border-radius: 999px;
+            color: var(--text);
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+        .tab:hover { border-color: var(--point); }
+        .tab.active {
+            background: var(--point);
+            border-color: var(--point);
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        /* 검색창 */
+        .search-box { position: relative; }
+        .search-box i {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a19c92;
+        }
+        .search-box .field { padding-left: 44px; }
+
+        /* 메뉴 목록 */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 16px;
+            max-height: 560px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 12px 14px 12px 18px;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+        }
+        .menu-info { min-width: 0; }
+        .menu-name {
+            display: block;
+            font-size: 1.05rem;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .menu-cat {
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
+        /* 삭제 버튼 (항상 보이되 연하게) */
+        .delete-btn {
+            flex-shrink: 0;
+            border: none;
+            background: transparent;
+            color: #b5afa4;
+            padding: 8px 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: color 0.2s, background 0.2s;
+        }
+        .delete-btn:hover { color: var(--danger); background: #fbeee6; }
+
+        /* 빈 화면 */
+        .empty-state {
+            padding: 48px 0;
+            text-align: center;
+            color: var(--muted);
+        }
+        .empty-state p { margin: 0; }
+        .empty-state .sub { margin-top: 4px; font-size: 0.9rem; }
+        .hidden { display: none !important; }
+
+        /* 스크롤바 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #d6d1c7; border-radius: 4px; }
+
+        /* ===== 하단 안내 ===== */
+        footer {
+            padding: 20px 20px 28px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        /* ===== 태블릿 이하: 1단 ===== */
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+
+        /* ===== 휴대폰 ===== */
+        @media (max-width: 560px) {
+            html { font-size: 17px; }
+            .top-bar { padding: 14px 16px 0; }
+            main { padding: 18px 16px 32px; }
+            .page-title h1 { font-size: 1.6rem; }
+            .card { padding: 22px 18px; border-radius: 18px; }
+            .menu-grid { grid-template-columns: 1fr; max-height: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 상단 링크 -->
+    <div class="top-bar">
+        <a href="index.html" class="back-link">← 업무 도구 모음</a>
+    </div>
+
+    <main>
+        <!-- 타이틀 -->
+        <div class="page-title">
+            <h1>오늘 뭐 먹지?</h1>
+            <p>메뉴를 등록하고 룰렛을 돌려 오늘의 점심을 정해 보세요.</p>
+        </div>
+
+        <div class="layout">
+
+            <!-- 왼쪽: 룰렛 + 메뉴 등록 -->
+            <section class="left-col">
+
+                <!-- 룰렛 카드 -->
+                <div class="card center">
+                    <h2>랜덤 메뉴 추천</h2>
+
+                    <div class="roulette-area">
+                        <div class="roulette-container">
+                            <div class="roulette-arrow"></div>
+                            <canvas id="rouletteCanvas" class="roulette-wheel"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 추첨 결과 -->
+                    <div id="resultDisplay" class="result-box">
+                        <p class="result-hint">버튼을 눌러 추천을 시작하세요</p>
+                        <p id="selectedMenuName" class="result-name">-</p>
+                        <p id="selectedMenuCategory" class="result-cat"></p>
+                    </div>
+
+                    <!-- 추첨 버튼과 대상 카테고리 -->
+                    <button id="spinBtn" class="btn btn-primary" onclick="spinRoulette()">점심 추첨하기</button>
+                    <div class="filter-row">
+                        <label for="rouletteFilter">대상</label>
+                        <select id="rouletteFilter" class="select-small" onchange="drawRoulette()">
+                            <option value="전체">전체 카테고리</option>
+                            <option value="한식">한식만</option>
+                            <option value="중식">중식만</option>
+                            <option value="일식">일식만</option>
+                            <option value="양식">양식만</option>
+                            <option value="기타">기타만</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 새 메뉴 등록 카드 -->
+                <div class="card">
+                    <h2>새 메뉴 등록</h2>
+                    <form id="addMenuForm" onsubmit="handleAddMenu(event)">
+                        <div class="form-group">
+                            <label for="menuName">메뉴 이름</label>
+                            <input type="text" id="menuName" class="field" required placeholder="예: 김치찌개">
+                        </div>
+                        <div class="form-group">
+                            <label for="menuCategory">카테고리</label>
+                            <select id="menuCategory" class="field" required>
+                                <option value="한식">한식</option>
+                                <option value="중식">중식</option>
+                                <option value="일식">일식</option>
+                                <option value="양식">양식</option>
+                                <option value="기타">기타</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-outline">메뉴 추가하기</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 오른쪽: 메뉴 목록 -->
+            <section>
+                <div class="card">
+                    <div class="list-header">
+                        <h2>메뉴 목록</h2>
+                        <p class="list-count">총 <strong id="totalCount">0</strong>개의 메뉴가 등록되어 있습니다.</p>
+                    </div>
+
+                    <!-- 카테고리 탭 -->
+                    <div class="tabs">
+                        <button class="tab active" data-category="전체" onclick="setCategoryFilter('전체')">전체</button>
+                        <button class="tab" data-category="한식" onclick="setCategoryFilter('한식')">한식</button>
+                        <button class="tab" data-category="중식" onclick="setCategoryFilter('중식')">중식</button>
+                        <button class="tab" data-category="일식" onclick="setCategoryFilter('일식')">일식</button>
+                        <button class="tab" data-category="양식" onclick="setCategoryFilter('양식')">양식</button>
+                        <button class="tab" data-category="기타" onclick="setCategoryFilter('기타')">기타</button>
+                    </div>
+
+                    <!-- 검색창 -->
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="searchInput" class="field" oninput="handleSearch()" placeholder="메뉴 이름 검색">
+                    </div>
+
+                    <!-- 메뉴 목록 (자바스크립트로 채움) -->
+                    <div id="menuGrid" class="menu-grid"></div>
+
+                    <!-- 결과가 없을 때 -->
+                    <div id="emptyState" class="empty-state hidden">
+                        <p>등록되었거나 검색 조건에 맞는 메뉴가 없습니다.</p>
+                        <p class="sub">새로운 메뉴를 추가해 보세요.</p>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 하단 안내 -->
+    <footer>
+        입력한 내용은 이 브라우저 안에서만 처리되며 어디에도 저장·전송되지 않습니다.
+    </footer>
+
+    <script>
+        // 기본 점심 메뉴 데이터 (메모리에서만 관리, 새로고침하면 처음 상태로 돌아감)
+        let menuList = [
+            { id: 1, name: "김치찌개", category: "한식" },
+            { id: 2, name: "제육볶음", category: "한식" },
+            { id: 3, name: "비빔밥", category: "한식" },
+            { id: 4, name: "짜장면", category: "중식" },
+            { id: 5, name: "짬뽕", category: "중식" },
+            { id: 6, name: "마라탕", category: "중식" },
+            { id: 7, name: "초밥", category: "일식" },
+            { id: 8, name: "돈까스", category: "일식" },
+            { id: 9, name: "라멘", category: "일식" },
+            { id: 10, name: "파스타", category: "양식" },
+            { id: 11, name: "수제버거", category: "양식" },
+            { id: 12, name: "샌드위치", category: "기타" }
+        ];
+
+        // 화면 상태 변수
+        let currentCategoryFilter = "전체"; // 목록 탭 필터
+        let searchQuery = "";               // 검색어
+        let isSpinning = false;             // 룰렛 회전 중 여부
+        let currentRotation = 0;            // 지금까지 누적된 룰렛 회전 각도(도)
+        let needRedraw = false;             // 회전 중 메뉴가 바뀌어 다시 그려야 하는지
+
+        // 룰렛 조각 색상 (남색 3단계) 과 각 색에 맞는 글자색
+        const palette = [
+            { fill: "#1f3a6d", text: "#ffffff" },
+            { fill: "#5b74a3", text: "#ffffff" },
+            { fill: "#dfe5ef", text: "#1f3a6d" }
+        ];
+
+        // 룰렛 캔버스 기본 크기(CSS 픽셀)
+        const WHEEL_SIZE = 300;
+
+        // 페이지 로드 시 초기화 (글꼴이 준비된 뒤 다시 그려 글자가 깨지지 않게 함)
+        window.addEventListener('load', () => {
+            setupCanvas();
+            renderMenuList();
+            drawRoulette();
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(drawRoulette);
+            }
+        });
+
+        // 고해상도 화면(휴대폰 등)에서 룰렛이 흐리지 않도록 캔버스 해상도 설정
+        function setupCanvas() {
+            const canvas = document.getElementById('rouletteCanvas');
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = WHEEL_SIZE * dpr;
+            canvas.height = WHEEL_SIZE * dpr;
+            canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        // 탭 필터와 검색어를 적용한 메뉴 목록
+        function getFilteredMenus() {
+            return menuList.filter(item => {
+                const matchesCategory = currentCategoryFilter === "전체" || item.category === currentCategoryFilter;
+                const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesCategory && matchesSearch;
+            });
+        }
+
+        // 카테고리 탭 변경
+        function setCategoryFilter(category) {
+            currentCategoryFilter = category;
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.category === category);
+            });
+            renderMenuList();
+        }
+
+        // 검색어 입력 처리
+        function handleSearch() {
+            searchQuery = document.getElementById('searchInput').value.trim();
+            renderMenuList();
+        }
+
+        // 새 메뉴 추가
+        function handleAddMenu(event) {
+            event.preventDefault();
+            const nameInput = document.getElementById('menuName');
+            const categoryInput = document.getElementById('menuCategory');
+
+            const name = nameInput.value.trim();
+            const category = categoryInput.value;
+            if (!name) return;
+
+            // 같은 이름이 이미 있으면 추가하지 않음
+            if (menuList.some(item => item.name === name)) {
+                alert('이미 등록되어 있는 메뉴입니다.');
+                return;
+            }
+
+            menuList.unshift({ id: Date.now(), name: name, category: category });
+            nameInput.value = '';
+
+            renderMenuList();
+            requestRouletteRedraw();
+        }
+
+        // 메뉴 삭제
+        function deleteMenu(id) {
+            menuList = menuList.filter(item => item.id !== id);
+            renderMenuList();
+            requestRouletteRedraw();
+        }
+
+        // 룰렛 다시 그리기 요청 (회전 중이면 멈춘 뒤에 그림)
+        function requestRouletteRedraw() {
+            if (isSpinning) {
+                needRedraw = true;
+            } else {
+                drawRoulette();
+            }
+        }
+
+        // 메뉴 목록 화면 그리기
+        function renderMenuList() {
+            const filtered = getFilteredMenus();
+            const grid = document.getElementById('menuGrid');
+            const emptyState = document.getElementById('emptyState');
+
+            document.getElementById('totalCount').textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '';
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            grid.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            grid.innerHTML = filtered.map(item => `
+                <div class="menu-item">
+                    <div class="menu-info">
+                        <span class="menu-name">${escapeHtml(item.name)}</span>
+                        <span class="menu-cat">${item.category}</span>
+                    </div>
+                    <button class="delete-btn" onclick="deleteMenu(${item.id})" title="메뉴 삭제" aria-label="${escapeHtml(item.name)} 삭제">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // 입력한 메뉴 이름을 안전한 HTML 글자로 바꿈
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML.replace(/"/g, '&quot;');
+        }
+
+        // 룰렛에 올릴 메뉴 (룰렛 전용 카테고리 선택 기준)
+        function getRouletteItems() {
+            const selectedCategory = document.getElementById('rouletteFilter').value;
+            if (selectedCategory === "전체") return menuList;
+            return menuList.filter(item => item.category === selectedCategory);
+        }
+
+        // 룰렛 그리기
+        function drawRoulette() {
+            const canvas = document.getElementById('rouletteCanvas');
+            const ctx = canvas.getContext('2d');
+            const items = getRouletteItems();
+            const c = WHEEL_SIZE / 2; // 중심 좌표
+
+            ctx.clearRect(0, 0, WHEEL_SIZE, WHEEL_SIZE);
+
+            // 메뉴가 없을 때 안내 문구
+            if (items.length === 0) {
+                ctx.fillStyle = "#6b6f78";
+                ctx.font = '16px "Noto Sans KR"';
+                ctx.textAlign = "center";
+                ctx.fillText("메뉴가 없습니다", c, c);
+                return;
+            }
+
+            const numOptions = items.length;
+            const arcSize = (2 * Math.PI) / numOptions;
+
+            for (let i = 0; i < numOptions; i++) {
+                const angle = i * arcSize;
+
+                // 조각 색 (마지막 조각이 첫 조각과 같은 색이 되지 않도록 조정)
+                let colorIndex = i % palette.length;
+                if (i === numOptions - 1 && numOptions > 1 && colorIndex === 0) colorIndex = 1;
+                const color = palette[colorIndex];
+
+                ctx.beginPath();
+                ctx.fillStyle = color.fill;
+                ctx.moveTo(c, c);
+                ctx.arc(c, c, c - 4, angle, angle + arcSize);
+                ctx.lineTo(c, c);
+                ctx.fill();
+
+                // 조각 위 메뉴 이름
+                ctx.save();
+                ctx.fillStyle = color.text;
+                ctx.translate(c, c);
+                ctx.rotate(angle + arcSize / 2);
+                ctx.textAlign = "right";
+                ctx.font = '500 15px "Noto Sans KR"';
+
+                // 이름이 길면 줄임
+                let text = items[i].name;
+                if (text.length > 6) text = text.substring(0, 5) + '..';
+                ctx.fillText(text, c - 16, 5);
+                ctx.restore();
+            }
+
+            // 가운데 원
+            ctx.beginPath();
+            ctx.arc(c, c, 32, 0, 2 * Math.PI);
+            ctx.fillStyle = "#fffdf9";
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "#1f3a6d";
+            ctx.stroke();
+
+            // 가운데 글자
+            ctx.fillStyle = "#1f3a6d";
+            ctx.font = 'bold 15px "Noto Sans KR"';
+            ctx.textAlign = "center";
+            ctx.fillText("점심", c, c + 5);
+        }
+
+        // 룰렛 돌리기
+        function spinRoulette() {
+            if (isSpinning) return;
+
+            const items = getRouletteItems();
+            if (items.length === 0) {
+                alert('추첨할 메뉴가 없습니다. 메뉴를 등록하거나 카테고리 필터를 변경해 주세요.');
+                return;
+            }
+
+            isSpinning = true;
+            const spinBtn = document.getElementById('spinBtn');
+            const filterSelect = document.getElementById('rouletteFilter');
+            spinBtn.disabled = true;
+            filterSelect.disabled = true; // 회전 중 룰렛 내용이 바뀌지 않도록 잠금
+
+            // 무작위로 당첨 메뉴 선택
+            const selectedIndex = Math.floor(Math.random() * items.length);
+            const arcSize = 360 / items.length;
+
+            // 화살표(맨 위, 캔버스 기준 270도)에 당첨 조각 가운데가 오도록 할 최종 각도
+            const targetAngle = ((270 - (selectedIndex * arcSize + arcSize / 2)) % 360 + 360) % 360;
+
+            // 현재 각도에서 목표 각도까지 시계 방향으로 더 돌아야 하는 양
+            const currentAngle = ((currentRotation % 360) + 360) % 360;
+            let delta = targetAngle - currentAngle;
+            if (delta < 0) delta += 360;
+
+            // 매번 5~7바퀴 이상 앞으로 돌도록 누적
+            const extraRounds = (5 + Math.floor(Math.random() * 3)) * 360;
+            currentRotation += extraRounds + delta;
+
+            document.getElementById('rouletteCanvas').style.transform = `rotate(${currentRotation}deg)`;
+
+            // 회전 애니메이션(4초)이 끝나면 결과 표시
+            setTimeout(() => {
+                isSpinning = false;
+                spinBtn.disabled = false;
+                filterSelect.disabled = false;
+
+                const selectedMenu = items[selectedIndex];
+                document.getElementById('selectedMenuName').textContent = selectedMenu.name;
+                document.getElementById('selectedMenuCategory').textContent =
+                    `${selectedMenu.category} · 오늘의 추천 메뉴입니다`;
+
+                // 결과 영역 잠깐 강조
+                const resultDisplay = document.getElementById('resultDisplay');
+                resultDisplay.classList.add('highlight');
+                setTimeout(() => resultDisplay.classList.remove('highlight'), 1500);
+
+                // 회전 중에 메뉴가 바뀌었다면 이제 다시 그림
+                if (needRedraw) {
+                    needRedraw = false;
+                    drawRoulette();
+                }
+            }, 4000);
+        }
+    </script>
+</body>
+</html>

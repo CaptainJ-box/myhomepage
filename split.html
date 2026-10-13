@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 페이지 나누기</title>
+    <!-- PDF-LIB 라이브러리 로드 -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 650px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .container {
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        h2 { margin-top: 0; color: #1a73e8; }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        input[type="file"], input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+        .help-text {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #1557b0; }
+        button:disabled { background-color: #a8c7fa; cursor: not-allowed; }
+        #status {
+            margin-top: 15px;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📄 PDF 페이지 분할기</h2>
+    
+    <div class="input-group">
+        <label for="pdfInput">1. PDF 파일 선택</label>
+        <input type="file" id="pdfInput" accept="application/pdf">
+        <div id="fileInfo" class="help-text"></div>
+    </div>
+
+    <div class="input-group">
+        <label for="pageRange">2. 추출할 페이지 번호 입력</label>
+        <input type="text" id="pageRange" placeholder="예: 1, 3, 5-8">
+        <div class="help-text">콤마(,)나 하이픈(-)을 사용해 지정하세요. (예: 1-3, 5)</div>
+    </div>
+
+    <button id="splitBtn" onclick="splitPDF()" disabled>PDF 분할 및 다운로드</button>
+    <div id="status"></div>
+</div>
+
+<script>
+    let loadedPdfBytes = null;
+    let totalPages = 0;
+
+    const pdfInput = document.getElementById('pdfInput');
+    const splitBtn = document.getElementById('splitBtn');
+    const fileInfo = document.getElementById('fileInfo');
+    const statusDiv = document.getElementById('status');
+
+    // 파일 선택 시 PDF 정보 읽기
+    pdfInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        statusDiv.innerText = "파일 읽는 중...";
+        loadedPdfBytes = await file.arrayBuffer();
+        
+        try {
+            const pdfDoc = await PDFLib.PDFDocument.load(loadedPdfBytes);
+            totalPages = pdfDoc.getPageCount();
+            fileInfo.innerText = `선택된 파일: ${file.name} (총 ${totalPages}페이지)`;
+            splitBtn.disabled = false;
+            statusDiv.innerText = "";
+        } catch (err) {
+            statusDiv.innerText = "PDF 파일을 불러오는데 실패했습니다.";
+            splitBtn.disabled = true;
+        }
+    });
+
+    // 페이지 범위 파싱 함수 ("1, 3-5" -> [0, 2, 3, 4] 인덱스로 변환)
+    function parsePageRange(rangeStr, maxPage) {
+        const pages = new Set();
+        const parts = rangeStr.split(',');
+
+        for (let part of parts) {
+            part = part.trim();
+            if (part.includes('-')) {
+                const [start, end] = part.split('-').map(num => parseInt(num.trim(), 10));
+                if (isNaN(start) || isNaN(end) || start < 1 || end > maxPage || start > end) {
+                    throw new Error(`유효하지 않은 범위입니다: ${part}`);
+                }
+                for (let i = start; i <= end; i++) pages.add(i - 1);
+            } else {
+                const page = parseInt(part, 10);
+                if (isNaN(page) || page < 1 || page > maxPage) {
+                    throw new Error(`유효하지 않은 페이지 번호입니다: ${part}`);
+                }
+                pages.add(page - 1);
+            }
+        }
+        return Array.from(pages).sort((a, b) => a - b);
+    }
+
+    // PDF 분할 실행
+    async function splitPDF() {
+        const rangeStr = document.getElementById('pageRange').value;
+        if (!rangeStr) {
+            alert("추출할 페이지 번호를 입력해주세요.");
+            return;
+        }
+
+        try {
+            statusDiv.style.color = "black";
+            statusDiv.innerText = "PDF 분할 처리 중...";
+            
+            const targetIndices = parsePageRange(rangeStr, totalPages);
+            if (targetIndices.length === 0) {
+                alert("선택된 페이지가 없습니다.");
+                return;
+            }
+
+            const srcPdf = await PDFLib.PDFDocument.load(loadedPdfBytes);
+            const newPdf = await PDFLib.PDFDocument.create();
+
+            // 선택한 페이지 복사 및 새 문서에 추가
+            const copiedPages = await newPdf.copyPages(srcPdf, targetIndices);
+            copiedPages.forEach(page => newPdf.addPage(page));
+
+            // 새 PDF 바이트 생성
+            const pdfBytes = await newPdf.save();
+
+            // 파일 다운로드 생성
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `extracted_pages.pdf`;
+            link.click();
+
+            statusDiv.style.color = "green";
+            statusDiv.innerText = "성공적으로 추출되어 다운로드되었습니다!";
+        } catch (err) {
+            statusDiv.style.color = "red";
+            statusDiv.innerText = err.message || "오류가 발생했습니다.";
+        }
+    }
+</script>
+
+</body>
+</html>
